@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::table('users', function (Blueprint $table) {
             // Add SSO ID field if it doesn't exist
             if (!Schema::hasColumn('users', 'sso_id')) {
-                $table->string('sso_id')->nullable()->after('email');
+                $table->string('sso_id')->nullable();
                 $table->index('sso_id');
             }
         });
@@ -22,7 +22,7 @@ return new class extends Migration
         Schema::table('sys_user', function (Blueprint $table) {
             // Add SSO ID field if it doesn't exist
             if (!Schema::hasColumn('sys_user', 'sso_id')) {
-                $table->string('sso_id')->nullable()->after('email');
+                $table->string('sso_id')->nullable();
                 $table->index('sso_id');
             }
         });

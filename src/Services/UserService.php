@@ -26,7 +26,7 @@ class UserService
 
     public function __construct()
     {
-        $this->userModel = config('sso-client.user.model', \App\Models\User::class);
+        $this->userModel = config('sso-client.user.model', '\App\Models\User::class');
         $this->identifierField = config('sso-client.user.identifier_field', 'email');
         $this->ssoIdField = config('sso-client.user.sso_id_field', 'sso_id');
         $this->updateableFields = config('sso-client.user.updateable_fields', ['name', 'email', 'email_verified_at']);

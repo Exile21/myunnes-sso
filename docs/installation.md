@@ -58,14 +58,20 @@ Tweak `sso-client.routes.*` in the published config (or matching environment var
 
 The package ships with two middleware aliases:
 
-- `sso.auth` – forces SSO authentication
+- `sso.auth` – forces SSO authentication (combine it with Laravel's `web` stack in your routes)
 - `sso.guest` – redirects authenticated users away from guest-only pages
 
 ```php
-Route::middleware(['sso.auth'])->group(function () {
+Route::middleware(['web', 'sso.auth'])->group(function () {
     Route::get('/dashboard', fn () => Inertia::render('Dashboard'))->name('dashboard');
 });
+
+Route::middleware(['web', 'sso.guest'])->group(function () {
+    Route::get('/login', fn () => Inertia::render('Auth/Login'))->name('login');
+});
 ```
+
+> The built-in SSO routes use the middleware configured in `sso-client.routes.middleware` (defaults to `['web']`), so they integrate cleanly with Laravel's standard session/auth handling. You can add `auth` or other middleware on top if your application requires additional checks.
 
 ## 7. (Optional) Use launch token support
 

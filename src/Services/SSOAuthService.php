@@ -248,6 +248,10 @@ class SSOAuthService
                 ->get("{$endpoint}/{$launchToken}");
 
             if (!$response->successful()) {
+                Log::warning('Launch token endpoint returned non-success response', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
                 return null;
             }
 

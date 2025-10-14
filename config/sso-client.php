@@ -130,7 +130,7 @@ return [
         'redirect_after_login' => env('SSO_REDIRECT_AFTER_LOGIN', '/dashboard'),
 
         // Fallback route name used when login fails
-        'fallback_login_route' => env('SSO_FALLBACK_LOGIN_ROUTE', 'login'),
+        'fallback_login_route' => env('SSO_FALLBACK_LOGIN_ROUTE', 'auth.login.view'),
 
         // Destination after logout (relative to your app)
         'redirect_after_logout' => env('SSO_REDIRECT_AFTER_LOGOUT', '/'),
@@ -170,7 +170,7 @@ return [
 
     'user' => [
         // User model class
-        'model' => env('SSO_USER_MODEL', \App\Models\User::class),
+        'model' => env('SSO_USER_MODEL', 'MyUnnes\Base\Models\SysUser::class'),
 
         // User identifier field (usually 'email' or 'username')
         'identifier_field' => env('SSO_USER_IDENTIFIER', 'email'),

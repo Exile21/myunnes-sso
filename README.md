@@ -42,10 +42,11 @@ composer require dsiunnes/myunnes-sso
     - Override `sso-client.routes.*` if you need a different prefix, middleware, or post-login redirect.
 5. **Protect routes with middleware (optional)**
     ```php
-    Route::middleware(['sso.auth'])->group(function () {
+    Route::middleware(['web', 'sso.auth'])->group(function () {
         Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');
     });
     ```
+    The SSO middleware layers nicely with Laravel's defaults (`web`, `auth`, etc.), so you can keep using existing guard logic alongside the SSO session.
 
 Need tokens for downstream APIs? Use the facade helpers:
 

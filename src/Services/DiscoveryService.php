@@ -59,7 +59,7 @@ class DiscoveryService
         $cacheKey = $this->getCacheKey('discovery');
 
         if (!$forceRefresh && $this->cacheEnabled) {
-            $cached = Cache::store($this->cacheStore)->get($cacheKey);
+            $cached = $this->cache()->get($cacheKey);
             if ($cached) {
                 return $cached;
             }
@@ -82,7 +82,7 @@ class DiscoveryService
 
             // Cache the document
             if ($this->cacheEnabled) {
-                Cache::store($this->cacheStore)->put($cacheKey, $document, $this->cacheTtl);
+                $this->cache()->put($cacheKey, $document, $this->cacheTtl);
             }
 
             return $document;
@@ -216,7 +216,7 @@ class DiscoveryService
         }
 
         $cacheKey = $this->getCacheKey('discovery');
-        return Cache::store($this->cacheStore)->forget($cacheKey);
+        return $this->cache()->forget($cacheKey);
     }
 
     /**
@@ -245,5 +245,21 @@ class DiscoveryService
         }
 
         return $request;
+    }
+
+    /**
+     * Resolve cache repository, honoring custom store configuration.
+     */
+    protected function cache(): \Illuminate\Contracts\Cache\Repository
+    {
+        if (!$this->cacheEnabled) {
+            return Cache::driver();
+        }
+
+        if (empty($this->cacheStore) || $this->cacheStore === 'default') {
+            return Cache::driver();
+        }
+
+        return Cache::store($this->cacheStore);
     }
 }

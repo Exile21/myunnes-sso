@@ -58,5 +58,11 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "repositories": {
+        "myunnes-sso": {
+            "type": "vcs",
+            "url": "https://github.com/Exile21/myunnes-sso.git"
+        }
+    }
 }

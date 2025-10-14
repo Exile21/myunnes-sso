@@ -108,6 +108,36 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Route Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Toggle and customize the built-in controller and routes that ship
+    | with the package.
+    |
+    */
+
+    'routes' => [
+        // Enable automatic route registration
+        'enabled' => env('SSO_ROUTES_ENABLED', true),
+
+        // Route prefix, i.e. /auth/sso/*
+        'prefix' => env('SSO_ROUTES_PREFIX', 'auth/sso'),
+
+        // Middleware applied to the routes
+        'middleware' => ['web'],
+
+        // Destination after a successful login
+        'redirect_after_login' => env('SSO_REDIRECT_AFTER_LOGIN', '/dashboard'),
+
+        // Fallback route name used when login fails
+        'fallback_login_route' => env('SSO_FALLBACK_LOGIN_ROUTE', 'login'),
+
+        // Destination after logout (relative to your app)
+        'redirect_after_logout' => env('SSO_REDIRECT_AFTER_LOGOUT', '/'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | HTTP Client Configuration
     |--------------------------------------------------------------------------
     |

@@ -31,6 +31,18 @@ The package exposes a fluent API through the `MyUnnes\SSOClient\SSOClient` class
 
 Register them in your route groups just like any Laravel middleware.
 
+## Built-in Routes
+
+When `sso-client.routes.enabled` is true (default), the service provider registers:
+
+| Route | Action | Description |
+| --- | --- | --- |
+| `GET {prefix}/login` | `SSOController@redirect` | Begins the OAuth flow and sends the user to the SSO server. |
+| `GET {prefix}/callback` | `SSOController@callback` | Handles the callback, logs the user in, and redirects them. |
+| `POST {prefix}/logout` | `SSOController@logout` | Logs out locally and forwards to the SSO logout endpoint. |
+
+Configure `{prefix}` and post-auth redirects through `sso-client.routes.*`.
+
 ## Launch Token Handling
 
 Direct app launches from the SSO server may pass a `launch_token` inside the `state` parameter. The package automatically resolves the token via the `/api/launch-token/{token}` endpoint before exchanging the authorization code. No additional configuration is required.

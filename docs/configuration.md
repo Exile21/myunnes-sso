@@ -51,6 +51,17 @@ Endpoints are discovered automatically via the `.well-known/openid-configuration
 | `lifetime` | Minutes before stored state entries expire. | `15` |
 | `clear_on_error` | Whether to clear session helpers after OAuth errors. | `true` |
 
+## Routes
+
+| Key | Description | Default |
+| --- | ----------- | ------- |
+| `enabled` | Register the package’s built-in controller and routes. | `true` |
+| `prefix` | URI prefix applied to generated routes. | `auth/sso` |
+| `middleware` | Middleware stack applied to route group. | `['web']` |
+| `redirect_after_login` | Where to send users after successful login (uses `redirect()->intended` first). | `/dashboard` |
+| `fallback_login_route` | Route name to redirect to when callback fails. | `login` |
+| `redirect_after_logout` | Local path used when sending users through the SSO logout endpoint. | `/` |
+
 ## HTTP Client
 
 | Key | Description | Default |

@@ -44,62 +44,15 @@ php artisan migrate
 
 This adds the `sso_id` column to the `users` table so accounts can be linked to SSO identities.
 
-## 5. Add controller and routes
+## 5. Use the built-in controller & routes
 
-Create a simple controller to bridge the redirect and callback:
+The package now registers a ready-made controller and route set:
 
-```bash
-php artisan make:controller Auth/SSOController
-```
+- `GET /auth/sso/login` – redirect to the SSO server
+- `GET /auth/sso/callback` – handle the OAuth response and log the user in
+- `POST /auth/sso/logout` – sign out locally and at the SSO server
 
-```php
-<?php
-
-namespace App\Http\Controllers\Auth;
-
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use MyUnnes\SSOClient\Facades\SSOClient;
-
-class SSOController extends Controller
-{
-    public function redirect()
-    {
-        return SSOClient::redirect();
-    }
-
-    public function callback(Request $request)
-    {
-        $user = SSOClient::handleCallback($request);
-
-        Auth::login($user);
-        $request->session()->regenerate();
-
-        return redirect()->intended('/dashboard');
-    }
-
-    public function logout(Request $request)
-    {
-        SSOClient::logout();
-        Auth::logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-
-        return redirect()->route('login');
-    }
-}
-```
-
-Register the routes (e.g., in `routes/web.php`):
-
-```php
-Route::middleware('web')->group(function () {
-    Route::get('/login/sso', [SSOController::class, 'redirect'])->name('sso.login');
-    Route::get('/auth/sso/callback', [SSOController::class, 'callback'])->name('sso.callback');
-    Route::post('/logout', [SSOController::class, 'logout'])->name('logout');
-});
-```
+Tweak `sso-client.routes.*` in the published config (or matching environment variables) if you need a different prefix, middleware, or post-login/post-logout destinations.
 
 ## 6. Protect pages with middleware
 

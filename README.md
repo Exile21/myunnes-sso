@@ -36,41 +36,11 @@ composer require dsiunnes/myunnes-sso
     ```bash
     php artisan migrate
     ```
-4. **Create a controller and routes**
-    ```php
-    use Illuminate\Http\Request;
-    use Illuminate\Support\Facades\Auth;
-    use MyUnnes\SSOClient\Facades\SSOClient;
-
-    class SSOController extends Controller
-    {
-        public function redirect()
-        {
-            return SSOClient::redirect();
-        }
-
-        public function callback(Request $request)
-        {
-            $user = SSOClient::handleCallback($request);
-
-            Auth::login($user);
-            $request->session()->regenerate();
-
-            return redirect()->intended('/dashboard');
-        }
-
-        public function logout(Request $request)
-        {
-            SSOClient::logout();
-            Auth::logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
-
-            return redirect()->route('login');
-        }
-    }
-    ```
-5. **Protect routes with middleware**
+4. **Use the ready-made routes**
+    - Visit `/auth/sso/login` (configurable) to start the flow.
+    - The package ships with a controller + routes for login, callback, and logout.
+    - Override `sso-client.routes.*` if you need a different prefix, middleware, or post-login redirect.
+5. **Protect routes with middleware (optional)**
     ```php
     Route::middleware(['sso.auth'])->group(function () {
         Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');

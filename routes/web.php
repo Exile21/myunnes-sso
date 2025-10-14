@@ -14,10 +14,17 @@
 */
 
 use Illuminate\Support\Facades\Route;
+use MyUnnes\SSOClient\Http\Controllers\SSOController;
 
-Route::prefix('auth/sso')->name('sso.')->middleware(['web'])->group(function () {
-    // Uncomment and customize these routes in your application
-    // Route::get('login', [App\Http\Controllers\Auth\SSOController::class, 'redirectToProvider'])->name('login');
-    // Route::get('callback', [App\Http\Controllers\Auth\SSOController::class, 'handleProviderCallback'])->name('callback');
-    // Route::post('logout', [App\Http\Controllers\Auth\SSOController::class, 'logout'])->name('logout');
-});
+$routeConfig = config('sso-client.routes');
+$prefix = $routeConfig['prefix'] ?? 'auth/sso';
+$middleware = $routeConfig['middleware'] ?? ['web'];
+
+Route::middleware($middleware)
+    ->prefix($prefix)
+    ->as('sso.')
+    ->group(function () {
+        Route::get('login', [SSOController::class, 'redirect'])->name('login');
+        Route::get('callback', [SSOController::class, 'callback'])->name('callback');
+        Route::post('logout', [SSOController::class, 'logout'])->name('logout');
+    });

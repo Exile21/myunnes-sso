@@ -140,13 +140,13 @@ class StateService
      * @param string $challengeMethod The challenge method used
      * @return void
      */
-    public function storePKCEData(string $state, string $codeVerifier, string $codeChallenge, string $challengeMethod = 'S256'): void
+    public function storePKCEData(string $state, string $codeVerifier, string $codeChallenge, string $challengeMethod = 'S256', array $extra = []): void
     {
-        $this->storeState($state, [
+        $this->storeState($state, array_merge([
             'code_verifier' => $codeVerifier,
             'code_challenge' => $codeChallenge,
             'challenge_method' => $challengeMethod,
-        ]);
+        ], $extra));
     }
 
     /**

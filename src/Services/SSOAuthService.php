@@ -80,7 +80,9 @@ class SSOAuthService
             $codeChallenge = $this->pkceService->generateCodeChallenge($codeVerifier, $this->codeChallengeMethod);
 
             // Store PKCE data with state
-            $this->stateService->storePKCEData($state, $codeVerifier, $codeChallenge, $this->codeChallengeMethod);
+            $this->stateService->storePKCEData($state, $codeVerifier, $codeChallenge, $this->codeChallengeMethod, [
+                'redirect_uri' => $this->redirectUri,
+            ]);
 
             // Get authorization endpoint from discovery
             $authorizationEndpoint = $this->discoveryService->getEndpoint('authorization_endpoint');
@@ -181,11 +183,14 @@ class SSOAuthService
         if (!isset($stateData['code_verifier'])) {
             throw new RuntimeException('PKCE code verifier not found');
         }
+        if ($stateData['redirect_uri'] ?? null) {
+            $this->redirectUri = $stateData['redirect_uri'];
+        }
 
         // Exchange code for tokens
         $tokens = $this->tokenService->exchangeCodeForTokens(
             $code,
-            $this->redirectUri,
+            $stateData['redirect_uri'] ?? $this->redirectUri,
             $stateData['code_verifier'],
             $this->clientId,
             $this->clientSecret
@@ -218,10 +223,13 @@ class SSOAuthService
             throw new RuntimeException('Launch token state mismatch');
         }
 
+        $redirectUri = $launchTokenResponse['redirect_uri'] ?? $this->redirectUri;
+        $this->redirectUri = $redirectUri;
+
         // Exchange code for tokens using launch token data
         $tokens = $this->tokenService->exchangeCodeForTokens(
             $code,
-            $this->redirectUri,
+            $redirectUri,
             $launchTokenResponse['code_verifier'],
             $this->clientId,
             $this->clientSecret

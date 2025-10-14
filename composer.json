@@ -1,0 +1,62 @@
+{
+    "name": "dsiunnes/myunnes-sso",
+    "description": "Secure OAuth 2.0/OIDC client package for Laravel applications to integrate with MyUnnes SSO Server",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["oauth2", "oidc", "sso", "authentication", "laravel", "security"],
+    "authors": [
+        {
+            "name": "ICT UNNES",
+            "email": "ict@email.unnes.ac.id",
+            "homepage": "http://ict.unnes.ac.id"
+        },
+        {
+            "name": "Muhammad Addin Malik",
+            "email": "addinmalik@email.unnes.ac.id",
+            "homepage": "https://github.com/exile21"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "illuminate/support": "^10.0|^11.0",
+        "illuminate/http": "^10.0|^11.0",
+        "illuminate/validation": "^10.0|^11.0",
+        "illuminate/encryption": "^10.0|^11.0",
+        "guzzlehttp/guzzle": "^7.0",
+        "firebase/php-jwt": "^6.0",
+        "paragonie/random_compat": "^9.99"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0",
+        "orchestra/testbench": "^8.0|^9.0",
+        "mockery/mockery": "^1.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "MyUnnes\\SSOClient\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "MyUnnes\\SSOClient\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "MyUnnes\\SSOClient\\SSOClientServiceProvider"
+            ],
+            "aliases": {
+                "SSOClient": "MyUnnes\\SSOClient\\Facades\\SSOClient"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "composer/package-versions-deprecated": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

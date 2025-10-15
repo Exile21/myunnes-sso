@@ -85,15 +85,11 @@ Endpoints are discovered automatically via the `.well-known/openid-configuration
 | Key | Description | Default |
 | --- | ----------- | ------- |
 | `model` | User model class to sync with. | `App\Models\User` |
-| `identifier_field` | Lookup field for local users (usually `email`). | `email` |
+| `identifier_field` | Lookup field for local users (configurable via `SSO_USER_IDENTIFIER`, e.g. `email_user`). | `email` |
 | `sso_id_field` | Column used to store the SSO subject (`sub`). | `sso_id` |
-| `updateable_fields` | Attributes that may be synced from SSO claims. | `['name','email','email_verified_at']` |
+| `updateable_fields` | Attributes that may be synced from SSO claims (comma separated via `SSO_USER_UPDATEABLE_FIELDS`). | `['name','email','email_verified_at','identitas_user']` |
 | `auto_create` | Create users automatically when not found. | `true` |
 | `auto_update` | Update mapped attributes on login. | `true` |
-| `identifier_sync_columns` | Columns that should mirror the resolved SSO identifier (`sub`/identifier). Accepts comma-separated env value. | `['identitas_user']` |
-| `email_columns` | Column list treated as the canonical email when reconciling users. Useful for schemas that use `email_user`, etc. | `['email','email_user']` |
-
-> Configure the last two options via `SSO_USER_IDENTIFIER_COLUMNS` and `SSO_USER_EMAIL_COLUMNS` if your client database uses different naming.
 
 ## Logging
 

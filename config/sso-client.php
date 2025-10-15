@@ -179,14 +179,7 @@ return [
         'sso_id_field' => env('SSO_USER_SSO_ID_FIELD', 'sso_id'),
 
         // Fields to update from SSO
-        'updateable_fields' => array_filter(array_map('trim', explode(',', env('SSO_USER_UPDATEABLE_FIELDS', 'name,email,email_verified_at')))),
-
-        // Columns that should mirror the resolved SSO identifier value.
-        // Provide a comma-separated list via SSO_USER_IDENTIFIER_COLUMNS env var if needed.
-        'identifier_sync_columns' => array_filter(array_map('trim', explode(',', env('SSO_USER_IDENTIFIER_COLUMNS', 'identitas_user')))),
-
-        // Columns considered as email when syncing identifiers (comma-separated list allowed)
-        'email_columns' => array_filter(array_map('trim', explode(',', env('SSO_USER_EMAIL_COLUMNS', 'email,email_user')))),
+        'updateable_fields' => array_filter(array_map('trim', explode(',', env('SSO_USER_UPDATEABLE_FIELDS', 'name,email,email_verified_at,identitas_user')))),
 
         // Auto-create users if they don't exist
         'auto_create' => env('SSO_AUTO_CREATE_USERS', true),

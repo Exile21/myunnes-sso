@@ -32,9 +32,9 @@ SSO_BASE_URL=https://sso.myunnes.com
 SSO_CLIENT_ID=your_client_id
 SSO_CLIENT_SECRET=your_client_secret
 SSO_REDIRECT_URI=${APP_URL}/auth/sso/callback
-# Optional schema overrides for client databases
-# SSO_USER_IDENTIFIER_COLUMNS=identitas_user,another_column
-# SSO_USER_EMAIL_COLUMNS=email,email_user
+# Optional overrides for custom schemas
+# SSO_USER_IDENTIFIER=email_user
+# SSO_USER_UPDATEABLE_FIELDS="name,email_user,identitas_user"
 ```
 
 See the [configuration reference](configuration.md) for all available options.

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace MyUnnes\SSOClient\Services;
 
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Contracts\Auth\Authenticatable;
 use RuntimeException;
@@ -25,23 +24,15 @@ class UserService
     protected bool $autoCreate;
     protected bool $autoUpdate;
     protected array $fallbackIdentifierFields = ['email', 'preferred_username', 'identifier'];
-    protected array $identifierSyncColumns;
-    protected ?string $userTable = null;
-    protected array $identifierColumnCache = [];
 
     public function __construct()
     {
         $this->userModel = config('sso-client.user.model', '\App\Models\User::class');
         $this->identifierField = config('sso-client.user.identifier_field', 'email');
         $this->ssoIdField = config('sso-client.user.sso_id_field', 'sso_id');
-        $this->updateableFields = config('sso-client.user.updateable_fields', ['name', 'email', 'email_verified_at']);
+        $this->updateableFields = config('sso-client.user.updateable_fields', ['name', 'email', 'email_verified_at', 'identitas_user']);
         $this->autoCreate = config('sso-client.user.auto_create', true);
         $this->autoUpdate = config('sso-client.user.auto_update', true);
-        $this->identifierSyncColumns = config('sso-client.user.identifier_sync_columns', []);
-        if (!is_array($this->identifierSyncColumns)) {
-            $this->identifierSyncColumns = array_map('trim', explode(',', (string) $this->identifierSyncColumns));
-        }
-        $this->identifierSyncColumns = array_values(array_filter(array_unique($this->identifierSyncColumns), fn ($value) => is_string($value) && $value !== ''));
 
         // Validate user model
         if (!class_exists($this->userModel)) {
@@ -56,16 +47,6 @@ class UserService
             $this->updateableFields[] = $this->identifierField;
         }
 
-        foreach ($this->identifierSyncColumns as $column) {
-            if (!in_array($column, $this->updateableFields, true)) {
-                $this->updateableFields[] = $column;
-            }
-        }
-
-        $modelInstance = new $this->userModel;
-        if ($modelInstance instanceof Model) {
-            $this->userTable = $modelInstance->getTable();
-        }
     }
 
     /**
@@ -101,8 +82,6 @@ class UserService
                     $this->updateUser($user, $ssoUserData);
                 }
 
-                $this->syncIdentifierColumnsByEmail($ssoUserData['email'] ?? null, $identifier, $user);
-
                 return $user;
             }
 
@@ -117,8 +96,6 @@ class UserService
                     $this->updateUser($user, $ssoUserData);
                 }
 
-                $this->syncIdentifierColumnsByEmail($ssoUserData['email'] ?? null, $identifier, $user);
-
                 return $user;
             }
 
@@ -130,8 +107,6 @@ class UserService
                     'sso_id' => $ssoId,
                     'identifier' => $identifier,
                 ]);
-
-                $this->syncIdentifierColumnsByEmail($ssoUserData['email'] ?? null, $identifier, $user);
 
                 return $user;
             }
@@ -365,12 +340,6 @@ class UserService
             $primaryIdentifier = $this->resolvePrimaryIdentifier($identifierCandidates);
             if (is_string($primaryIdentifier) && trim($primaryIdentifier) !== '') {
                 $userData[$this->identifierField] = $primaryIdentifier;
-
-                foreach ($this->identifierSyncColumns as $column) {
-                    if ($this->shouldSyncIdentifierColumn($column)) {
-                        $userData[$column] = $primaryIdentifier;
-                    }
-                }
             }
         }
 
@@ -433,8 +402,19 @@ class UserService
      */
     protected function resolveIdentifierCandidates(array $ssoUserData): array
     {
-        $fields = array_unique(array_merge([$this->identifierField], $this->fallbackIdentifierFields));
         $candidates = [];
+
+        $emailValue = $ssoUserData['email'] ?? null;
+        if (is_string($emailValue)) {
+            $emailValue = trim($emailValue);
+        }
+
+        if (is_string($emailValue) && $emailValue !== '') {
+            $candidates['email'] = $emailValue;
+            $candidates[$this->identifierField] = $emailValue;
+        }
+
+        $fields = array_unique(array_merge([$this->identifierField], $this->fallbackIdentifierFields));
 
         foreach ($fields as $field) {
             if (!isset($ssoUserData[$field])) {
@@ -451,14 +431,7 @@ class UserService
             }
         }
 
-        $emailValue = $ssoUserData['email'] ?? null;
-        if (is_string($emailValue) && $emailValue !== '') {
-            foreach ($this->getEmailColumns() as $column) {
-                $candidates[$column] = $emailValue;
-            }
-        }
-
-        return $candidates;
+        return array_filter($candidates, fn ($value) => is_string($value) && $value !== '');
     }
 
     /**
@@ -480,107 +453,5 @@ class UserService
         $firstKey = array_key_first($identifierCandidates);
 
         return $firstKey ? $identifierCandidates[$firstKey] : null;
-    }
-
-    protected function shouldSyncIdentifierColumn(string $column): bool
-    {
-        if (!$this->userTable) {
-            return false;
-        }
-
-        if (!array_key_exists($column, $this->identifierColumnCache)) {
-            try {
-                $this->identifierColumnCache[$column] = Schema::hasColumn($this->userTable, $column);
-            } catch (\Throwable $e) {
-                Log::warning('Failed checking identifier sync column', [
-                    'table' => $this->userTable,
-                    'column' => $column,
-                    'error' => $e->getMessage(),
-                ]);
-                $this->identifierColumnCache[$column] = false;
-            }
-        }
-
-        return $this->identifierColumnCache[$column];
-    }
-
-    protected function syncIdentifierColumnsByEmail(?string $email, string $identifier, ?Authenticatable $user = null): void
-    {
-        if (!$email || empty($this->identifierSyncColumns) || !$this->userTable) {
-            return;
-        }
-
-        $syncColumns = array_filter($this->identifierSyncColumns, fn ($column) => $this->shouldSyncIdentifierColumn($column));
-
-        if (empty($syncColumns)) {
-            return;
-        }
-
-        $update = [];
-        foreach ($syncColumns as $column) {
-            $update[$column] = $identifier;
-        }
-
-        try {
-            $emailColumns = $this->getEmailColumns();
-            if (empty($emailColumns)) {
-                return;
-            }
-
-            $query = $this->userModel::query()->where(function ($builder) use ($emailColumns, $email) {
-                foreach ($emailColumns as $column) {
-                    $builder->orWhere($column, $email);
-                }
-            });
-
-            if ($user instanceof Model) {
-                $query->whereKey($user->getKey());
-            }
-
-            if (!empty($update)) {
-                $query->update($update);
-
-                if ($user instanceof Model) {
-                    foreach ($update as $column => $value) {
-                        $user->setAttribute($column, $value);
-                    }
-                }
-            }
-        } catch (\Exception $e) {
-            Log::warning('Failed syncing identifier columns via email', [
-                'email' => $email,
-                'columns' => array_keys($update),
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    /**
-     * Determine the email columns present on the user table.
-     *
-     * @return array<int, string>
-     */
-    protected function getEmailColumns(): array
-    {
-        if (!$this->userTable) {
-            return [];
-        }
-
-        $customColumns = config('sso-client.user.email_columns', ['email', 'email_user']);
-
-        if (!is_array($customColumns)) {
-            $customColumns = array_map('trim', explode(',', (string) $customColumns));
-        }
-
-        $columns = array_unique(array_filter(array_map('trim', $customColumns), fn ($column) => $column !== ''));
-
-        $validColumns = [];
-        foreach ($columns as $column) {
-            if ($this->shouldSyncIdentifierColumn($column)) {
-                $validColumns[] = $column;
-            }
-        }
-
-        return $validColumns;
     }
 }

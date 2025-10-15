@@ -343,6 +343,9 @@ class UserService
         $fieldMapping = [
             'name' => $ssoUserData['name'] ?? ($composedName !== '' ? $composedName : null),
             'email' => $ssoUserData['email'] ?? null,
+            'nm_user' => $ssoUserData['name'] ?? ($composedName !== '' ? $composedName : null),
+            'username_user' => $ssoUserData['email'] ?? null,
+            'identitas_user' => $ssoUserData['identifier'] ?? null,
             'first_name' => $givenName,
             'last_name' => $familyName,
             'username' => $ssoUserData['preferred_username'] ?? null,

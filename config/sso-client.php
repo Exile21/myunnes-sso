@@ -173,19 +173,36 @@ return [
         'model' => env('SSO_USER_MODEL', 'MyUnnes\Base\Models\SysUser::class'),
 
         // User identifier field (usually 'email' or 'username')
-        'identifier_field' => env('SSO_USER_IDENTIFIER', 'email'),
+        'identifier_field' => env('SSO_USER_IDENTIFIER', 'email_user'),
 
         // SSO ID field in user table
         'sso_id_field' => env('SSO_USER_SSO_ID_FIELD', 'sso_id'),
 
         // Fields to update from SSO
-        'updateable_fields' => array_filter(array_map('trim', explode(',', env('SSO_USER_UPDATEABLE_FIELDS', 'name,email,email_verified_at')))),
+        'updateable_fields' => array_filter(array_map('trim', explode(',', env('SSO_USER_UPDATEABLE_FIELDS', 'username_user,nm_user,identitas_user')))),
 
         // Optional field mappings for aligning SSO claims with custom columns.
+        // Use ':' prefix for derived values like :identifier, :email, :full_name
         // Example: ['username_user' => [':identifier', ':email'], 'nm_user' => [':full_name']]
         'field_mappings' => [
-            // Publish this config file to customize mappings per client schema.
+            // Default mappings - customize by publishing this config
+            'username_user' => [':email'],
+            'nm_user' => [':full_name'],
+            'identitas_user' => [':identifier'],
+            // Add custom mappings for your schema, e.g.:
+            // 'username_user' => [':email', ':identifier'],
+            // 'nm_user' => [':full_name'],
+            // 'identitas_user' => [':identifier'],
         ],
+
+        // Set user as active on creation (if your table has is_active, aktif, status, etc.)
+        'set_active_on_create' => env('SSO_SET_USER_ACTIVE', true),
+
+        // The column name for active status (if set_active_on_create is true)
+        'active_field' => env('SSO_USER_ACTIVE_FIELD', 'is_aktif'),
+
+        // The value to set for active status (true, 1, 'active', etc.)
+        'active_value' => env('SSO_USER_ACTIVE_VALUE', 1),
 
         // Auto-create users if they don't exist
         'auto_create' => env('SSO_AUTO_CREATE_USERS', true),

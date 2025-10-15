@@ -25,6 +25,9 @@ class UserService
     protected bool $autoUpdate;
     protected array $fallbackIdentifierFields = ['email', 'preferred_username', 'identifier'];
     protected array $fieldMappings;
+    protected bool $setActiveOnCreate;
+    protected string $activeField;
+    protected mixed $activeValue;
 
     public function __construct()
     {
@@ -32,10 +35,13 @@ class UserService
         $this->identifierField = config('sso-client.user.identifier_field', 'email');
         $this->ssoIdField = config('sso-client.user.sso_id_field', 'sso_id');
         $this->updateableFields = array_values(array_filter(array_unique(
-            config('sso-client.user.updateable_fields', ['name', 'email', 'email_verified_at', 'identitas_user'])
+            config('sso-client.user.updateable_fields', ['name', 'email', 'identitas_user'])
         )));
         $this->autoCreate = config('sso-client.user.auto_create', true);
         $this->autoUpdate = config('sso-client.user.auto_update', true);
+        $this->setActiveOnCreate = config('sso-client.user.set_active_on_create', false);
+        $this->activeField = config('sso-client.user.active_field', 'is_active');
+        $this->activeValue = config('sso-client.user.active_value', true);
 
         // Validate user model
         if (!class_exists($this->userModel)) {
@@ -214,9 +220,16 @@ class UserService
             // Add SSO ID
             $userData[$this->ssoIdField] = $ssoUserData['sub'];
 
-            // Set email as verified if provided by SSO
-            if (isset($ssoUserData['email']) && !isset($userData['email_verified_at'])) {
+            // Set email as verified if provided by SSO and field exists in updateable fields
+            if (isset($ssoUserData['email']) &&
+                in_array('email_verified_at', $this->updateableFields, true) &&
+                !isset($userData['email_verified_at'])) {
                 $userData['email_verified_at'] = now();
+            }
+
+            // Set user as active if configured
+            if ($this->setActiveOnCreate && !isset($userData[$this->activeField])) {
+                $userData[$this->activeField] = $this->activeValue;
             }
 
             /** @var \Illuminate\Database\Eloquent\Model&\Illuminate\Contracts\Auth\Authenticatable $user */
@@ -461,16 +474,19 @@ class UserService
      */
     protected function prepareFieldMappings($configMappings): array
     {
+        // Sensible defaults for common scenarios
         $defaultMappings = [
             $this->identifierField => [':identifier', ':email'],
             'name' => [':full_name'],
-            'username_user' => [':identifier', ':email'],
-            'nm_user' => [':full_name'],
-            'identitas_user' => [':identifier'],
+            'email' => [':email'],
         ];
 
+        // Use provided config mappings, or fall back to defaults
         if (!is_array($configMappings) || empty($configMappings)) {
             $configMappings = $defaultMappings;
+        } else {
+            // Merge with defaults, config takes precedence
+            $configMappings = array_merge($defaultMappings, $configMappings);
         }
 
         $normalized = [];
@@ -480,6 +496,7 @@ class UserService
                 continue;
             }
 
+            // Normalize sources to array
             $sources = is_array($sources) ? $sources : [$sources];
             $sources = array_values(array_filter(array_map(
                 function ($source) {
@@ -492,6 +509,7 @@ class UserService
                 continue;
             }
 
+            // Only include fields in updateable list or identifier field
             if (!in_array($column, $this->updateableFields, true) && $column !== $this->identifierField) {
                 continue;
             }
@@ -499,6 +517,7 @@ class UserService
             $normalized[$column] = $sources;
         }
 
+        // Ensure identifier field always has a mapping
         if (!isset($normalized[$this->identifierField])) {
             $normalized[$this->identifierField] = [':identifier', ':email'];
         }

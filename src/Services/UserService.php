@@ -23,6 +23,7 @@ class UserService
     protected array $updateableFields;
     protected bool $autoCreate;
     protected bool $autoUpdate;
+    protected array $fallbackIdentifierFields = ['email', 'preferred_username', 'identifier'];
 
     public function __construct()
     {
@@ -40,6 +41,10 @@ class UserService
 
         if (!is_subclass_of($this->userModel, Authenticatable::class)) {
             throw new InvalidArgumentException("User model must implement Authenticatable interface: {$this->userModel}");
+        }
+
+        if (!in_array($this->identifierField, $this->updateableFields, true)) {
+            $this->updateableFields[] = $this->identifierField;
         }
     }
 
@@ -59,10 +64,12 @@ class UserService
             }
 
             $ssoId = $ssoUserData['sub'];
-            $identifier = $ssoUserData[$this->identifierField] ?? null;
+            $identifierCandidates = $this->resolveIdentifierCandidates($ssoUserData);
+
+            $identifier = $this->resolvePrimaryIdentifier($identifierCandidates);
 
             if (!$identifier) {
-                throw new InvalidArgumentException("Missing identifier field '{$this->identifierField}' in SSO user data");
+                throw new InvalidArgumentException('Missing identifier in SSO user data');
             }
 
             // Try to find user by SSO ID first
@@ -78,7 +85,7 @@ class UserService
             }
 
             // Try to find user by identifier (email, username, etc.)
-            $user = $this->findUserByIdentifier($identifier);
+            $user = $this->findUserByIdentifiers($identifierCandidates);
 
             if ($user) {
                 // Link existing user to SSO
@@ -145,18 +152,28 @@ class UserService
      * @param string $identifier User identifier
      * @return Authenticatable|null
      */
-    public function findUserByIdentifier(string $identifier): ?Authenticatable
+    public function findUserByIdentifiers(array $identifiers): ?Authenticatable
     {
-        try {
-            return $this->userModel::where($this->identifierField, $identifier)->first();
-        } catch (\Exception $e) {
-            Log::error('Error finding user by identifier', [
-                'identifier' => $identifier,
-                'field' => $this->identifierField,
-                'error' => $e->getMessage(),
-            ]);
-            return null;
+        foreach ($identifiers as $field => $value) {
+            if (!is_string($value) || trim($value) === '') {
+                continue;
+            }
+
+            try {
+                $user = $this->userModel::where($field, $value)->first();
+                if ($user) {
+                    return $user;
+                }
+            } catch (\Exception $e) {
+                Log::error('Error finding user by identifier', [
+                    'identifier' => $value,
+                    'field' => $field,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
+
+        return null;
     }
 
     /**
@@ -282,6 +299,7 @@ class UserService
     protected function mapSSODataToUserData(array $ssoUserData): array
     {
         $userData = [];
+        $identifierCandidates = $this->resolveIdentifierCandidates($ssoUserData);
 
         // Map standard OIDC claims to user fields
         $givenName = $ssoUserData['given_name'] ?? null;
@@ -306,6 +324,13 @@ class UserService
             }
         }
 
+        if (!empty($identifierCandidates)) {
+            $primaryIdentifier = $this->resolvePrimaryIdentifier($identifierCandidates);
+            if (is_string($primaryIdentifier) && trim($primaryIdentifier) !== '') {
+                $userData[$this->identifierField] = $primaryIdentifier;
+            }
+        }
+
         return $userData;
     }
 
@@ -318,16 +343,11 @@ class UserService
     protected function validateSSOUserData(array $ssoUserData): bool
     {
         // Must have 'sub' (subject) claim
-        if (!isset($ssoUserData['sub']) || !is_string($ssoUserData['sub'])) {
+        if (!isset($ssoUserData['sub']) || !is_string($ssoUserData['sub']) || trim($ssoUserData['sub']) === '') {
             return false;
         }
 
-        // Must have identifier field
-        if (!isset($ssoUserData[$this->identifierField])) {
-            return false;
-        }
-
-        return true;
+        return !empty($this->resolveIdentifierCandidates($ssoUserData));
     }
 
     /**
@@ -360,5 +380,55 @@ class UserService
         }
 
         return $sanitized;
+    }
+
+    /**
+     * Resolve potential identifier values from SSO payload.
+     *
+     * @param array $ssoUserData
+     * @return array<string, string>
+     */
+    protected function resolveIdentifierCandidates(array $ssoUserData): array
+    {
+        $fields = array_unique(array_merge([$this->identifierField], $this->fallbackIdentifierFields));
+        $candidates = [];
+
+        foreach ($fields as $field) {
+            if (!isset($ssoUserData[$field])) {
+                continue;
+            }
+
+            $value = $ssoUserData[$field];
+            if (is_string($value)) {
+                $value = trim($value);
+            }
+
+            if (is_string($value) && $value !== '') {
+                $candidates[$field] = $value;
+            }
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * Determine the primary identifier value to use.
+     *
+     * @param array<string, string> $identifierCandidates
+     * @return string|null
+     */
+    protected function resolvePrimaryIdentifier(array $identifierCandidates): ?string
+    {
+        if (empty($identifierCandidates)) {
+            return null;
+        }
+
+        if (isset($identifierCandidates[$this->identifierField])) {
+            return $identifierCandidates[$this->identifierField];
+        }
+
+        $firstKey = array_key_first($identifierCandidates);
+
+        return $firstKey ? $identifierCandidates[$firstKey] : null;
     }
 }

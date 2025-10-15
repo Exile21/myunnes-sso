@@ -170,7 +170,7 @@ return [
 
     'user' => [
         // User model class
-        'model' => env('SSO_USER_MODEL', 'MyUnnes\Base\Models\SysUser'),
+        'model' => env('SSO_USER_MODEL', 'MyUnnes\Base\Models\SysUser::class'),
 
         // User identifier field (usually 'email' or 'username')
         'identifier_field' => env('SSO_USER_IDENTIFIER', 'email'),

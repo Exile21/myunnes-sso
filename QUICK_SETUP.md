@@ -129,9 +129,9 @@ php artisan vendor:publish --tag=sso-client-config
 
 | Derived Value | Description | Fallback Chain |
 |--------------|-------------|----------------|
-| `:identifier` | Smart identifier | email → preferred_username → sub |
+| `:identifier` | Direct identifier | identifier claim only |
 | `:email` | Email address | email claim |
-| `:full_name` | Full name | name → given_name + family_name → email |
+| `:full_name` | Full name | name → given_name + family_name → email → preferred_username → identifier |
 | `:given_name` | First name | given_name claim |
 | `:family_name` | Last name | family_name claim |
 | `:preferred_username` | Username | preferred_username claim |

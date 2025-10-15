@@ -182,17 +182,71 @@ return [
         'updateable_fields' => array_filter(array_map('trim', explode(',', env('SSO_USER_UPDATEABLE_FIELDS', 'username_user,nm_user,identitas_user')))),
 
         // Optional field mappings for aligning SSO claims with custom columns.
-        // Use ':' prefix for derived values like :identifier, :email, :full_name
-        // Example: ['username_user' => [':identifier', ':email'], 'nm_user' => [':full_name']]
+        // Map your database columns to SSO data sources (tries each source in order until non-empty value found)
+        //
+        // AVAILABLE SSO CLAIMS (use as-is, without ':' prefix):
+        // - 'sub'                  => SSO user ID (unique identifier)
+        // - 'email'                => Email address
+        // - 'email_verified'       => Email verification status (boolean)
+        // - 'name'                 => Full name
+        // - 'given_name'           => First name
+        // - 'family_name'          => Last name / surname
+        // - 'middle_name'          => Middle name
+        // - 'nickname'             => Nickname
+        // - 'preferred_username'   => Preferred username
+        // - 'profile'              => Profile page URL
+        // - 'picture'              => Profile picture URL
+        // - 'website'              => Website URL
+        // - 'gender'               => Gender
+        // - 'birthdate'            => Date of birth
+        // - 'zoneinfo'             => Time zone
+        // - 'locale'               => Locale/language preference
+        // - 'phone_number'         => Phone number
+        // - 'phone_number_verified' => Phone verification status
+        // - 'address'              => Address object
+        // - 'updated_at'           => Last profile update timestamp
+        // - Any custom claims from your SSO server
+        //
+        // AVAILABLE DERIVED VALUES (use with ':' prefix):
+        // - ':identifier'          => Direct from 'identifier' claim (no fallbacks)
+        // - ':email'               => Email address
+        // - ':full_name'           => Full name (name → given_name + family_name → email → preferred_username → identifier)
+        // - ':given_name'          => First name
+        // - ':family_name'         => Last name
+        // - ':preferred_username'  => Preferred username
+        // - ':sub'                 => SSO user ID
+        //
+        // SYNTAX:
+        // 'your_column' => ['source1', 'source2', 'source3'],  // Tries sources in order
+        //
+        // EXAMPLES:
+        // 'name' => [':full_name']                             // Use derived full name
+        // 'email' => [':email', 'email']                       // Try derived, fallback to claim
+        // 'username' => [':preferred_username', ':email']      // Username or email
+        // 'identifier' => [':identifier', 'identifier']        // Direct identifier claim
+        // 'phone' => ['phone_number']                          // Direct SSO claim
+        // 'avatar' => ['picture']                              // Profile picture URL
+        // 'locale' => ['locale', 'zoneinfo']                   // Locale or timezone
+        //
         'field_mappings' => [
-            // Default mappings - customize by publishing this config
+            // Default mappings - customize for your database schema
             'username_user' => [':email'],
             'nm_user' => [':full_name'],
             'identitas_user' => [':identifier'],
-            // Add custom mappings for your schema, e.g.:
-            // 'username_user' => [':email', ':identifier'],
-            // 'nm_user' => [':full_name'],
-            // 'identitas_user' => [':identifier'],
+
+            // Examples for common columns (uncomment and modify as needed):
+            // 'name' => [':full_name', 'name'],
+            // 'email' => [':email'],
+            // 'first_name' => [':given_name', 'given_name'],
+            // 'last_name' => [':family_name', 'family_name'],
+            // 'username' => [':preferred_username', ':email'],
+            // 'phone' => ['phone_number'],
+            // 'avatar' => ['picture'],
+            // 'bio' => ['profile'],
+            // 'locale' => ['locale'],
+            // 'timezone' => ['zoneinfo'],
+            // 'gender' => ['gender'],
+            // 'birth_date' => ['birthdate'],
         ],
 
         // Set user as active on creation (if your table has is_active, aktif, status, etc.)

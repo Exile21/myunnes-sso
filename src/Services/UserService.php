@@ -545,14 +545,11 @@ class UserService
             $name = trim(($given ?? '') . ' ' . ($family ?? '')) ?: null;
         }
 
-        // Determine identifier with fallback chain
+        // Identifier - direct from 'identifier' claim only (no fallbacks)
         $identifier = !empty($ssoUserData['identifier']) ? trim((string) $ssoUserData['identifier']) : null;
-        if (!$identifier) {
-            $identifier = $email ?? $preferred ?? $sub;
-        }
 
         // Full name fallback chain
-        $fullName = $name ?? $preferred ?? $email ?? $identifier;
+        $fullName = $name ?? $email ?? $preferred ?? $identifier;
 
         return [
             'sub' => $sub,

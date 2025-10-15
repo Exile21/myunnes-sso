@@ -28,9 +28,9 @@ Map SSO claims to your custom database columns using the `field_mappings` config
 - Any custom claim from your SSO server
 
 **Derived Values** (use `:` prefix):
-- `:identifier` - Smart identifier (email → preferred_username → sub)
+- `:identifier` - Direct from 'identifier' claim (no fallbacks)
 - `:email` - Email address
-- `:full_name` - Composed full name (name → given_name + family_name → email)
+- `:full_name` - Composed full name (name → given_name + family_name → email → preferred_username → identifier)
 - `:given_name` - First name
 - `:family_name` - Last name
 - `:preferred_username` - Username
@@ -51,7 +51,7 @@ Map SSO claims to your custom database columns using the `field_mappings` config
     'username_user' => [':email', ':identifier'],           // Try email first, fallback to identifier
     'nm_user' => [':full_name', 'name'],                   // Try derived full_name, fallback to name claim
     'email_user' => [':email'],                             // Email address
-    'identitas_user' => [':identifier', ':preferred_username'], // Smart identifier or username
+    'identitas_user' => [':identifier', 'identifier'],      // Identifier from claim
 ],
 ```
 

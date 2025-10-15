@@ -27,7 +27,7 @@ class UserService
 
     public function __construct()
     {
-        $this->userModel = config('sso-client.user.model', '\App\Models\User::class');
+        $this->userModel = config('sso-client.user.model', \App\Models\User::class);
         $this->identifierField = config('sso-client.user.identifier_field', 'email');
         $this->ssoIdField = config('sso-client.user.sso_id_field', 'sso_id');
         $this->updateableFields = array_values(array_filter(array_unique(
@@ -213,7 +213,7 @@ class UserService
                 $userData['email_verified_at'] = now();
             }
 
-            /** @var \Illuminate\Database\Eloquent\Model $model */
+            /** @var \Illuminate\Database\Eloquent\Model&\Illuminate\Contracts\Auth\Authenticatable $model */
             $model = new $this->userModel();
             foreach ($userData as $field => $value) {
                 $model->setAttribute($field, $value);
@@ -221,6 +221,7 @@ class UserService
 
             $model->save();
 
+            /** @var \Illuminate\Contracts\Auth\Authenticatable */
             return $model;
 
         } catch (\Exception $e) {
@@ -323,17 +324,24 @@ class UserService
     {
         $userData = [];
         $identifierCandidates = $this->resolveIdentifierCandidates($ssoUserData);
+        $primaryIdentifier = $this->resolvePrimaryIdentifier($identifierCandidates);
 
         // Map standard OIDC claims to user fields with sensible fallbacks
         $givenName = $ssoUserData['given_name'] ?? null;
         $familyName = $ssoUserData['family_name'] ?? null;
         $composedName = trim(implode(' ', array_filter([$givenName, $familyName])));
         $emailValue = $ssoUserData['email'] ?? null;
+        if (!$emailValue && $primaryIdentifier) {
+            $emailValue = $primaryIdentifier;
+        }
+
         $nameValue = $ssoUserData['name']
             ?? ($composedName !== '' ? $composedName : null)
-            ?? ($emailValue ?? null);
+            ?? ($emailValue ?? $primaryIdentifier);
+
         $identifierValue = $ssoUserData['identifier']
             ?? $emailValue
+            ?? $primaryIdentifier
             ?? ($ssoUserData['sub'] ?? null);
 
         $fieldMapping = [
@@ -360,11 +368,8 @@ class UserService
             }
         }
 
-        if (!empty($identifierCandidates)) {
-            $primaryIdentifier = $this->resolvePrimaryIdentifier($identifierCandidates);
-            if (is_string($primaryIdentifier) && trim($primaryIdentifier) !== '') {
-                $userData[$this->identifierField] = $primaryIdentifier;
-            }
+        if (is_string($primaryIdentifier) && trim($primaryIdentifier) !== '') {
+            $userData[$this->identifierField] = $primaryIdentifier;
         }
 
         return $userData;

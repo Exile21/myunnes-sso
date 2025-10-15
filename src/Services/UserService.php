@@ -30,9 +30,18 @@ class UserService
         $this->userModel = config('sso-client.user.model', '\App\Models\User::class');
         $this->identifierField = config('sso-client.user.identifier_field', 'email');
         $this->ssoIdField = config('sso-client.user.sso_id_field', 'sso_id');
-        $this->updateableFields = config('sso-client.user.updateable_fields', ['name', 'email', 'email_verified_at', 'identitas_user']);
+        $this->updateableFields = array_values(array_filter(array_unique(
+            config('sso-client.user.updateable_fields', ['name', 'email', 'email_verified_at', 'identitas_user'])
+        )));
         $this->autoCreate = config('sso-client.user.auto_create', true);
         $this->autoUpdate = config('sso-client.user.auto_update', true);
+
+        if ($this->identifierField !== 'email') {
+            $this->fallbackIdentifierFields = array_values(array_filter(
+                $this->fallbackIdentifierFields,
+                fn ($field) => $field !== 'email'
+            ));
+        }
 
         // Validate user model
         if (!class_exists($this->userModel)) {
@@ -181,7 +190,6 @@ class UserService
     {
         return $this->findUserByIdentifiers([
             $this->identifierField => $identifier,
-            'email' => $identifier,
         ]);
     }
 
@@ -205,7 +213,15 @@ class UserService
                 $userData['email_verified_at'] = now();
             }
 
-            return $this->userModel::create($userData);
+            /** @var \Illuminate\Database\Eloquent\Model $model */
+            $model = new $this->userModel();
+            foreach ($userData as $field => $value) {
+                $model->setAttribute($field, $value);
+            }
+
+            $model->save();
+
+            return $model;
 
         } catch (\Exception $e) {
             Log::error('Error creating user', [
@@ -239,20 +255,19 @@ class UserService
 
             if (!empty($updateData)) {
                 if ($user instanceof Model) {
-                    $user->update($updateData);
-                } else {
-                    // For non-Eloquent models, try to update each field individually
-                    foreach ($updateData as $field => $value) {
-                        if (property_exists($user, $field)) {
-                            $user->{$field} = $value;
-                        }
-                    }
+                    $user->forceFill($updateData)->save();
+                    return;
+                }
 
-                    // Check if model has save method before calling
-                    if (method_exists($user, 'save')) {
-                        /** @var \Illuminate\Database\Eloquent\Model $user */
-                        $user->save();
+                foreach ($updateData as $field => $value) {
+                    if (property_exists($user, $field)) {
+                        $user->{$field} = $value;
                     }
+                }
+
+                if (method_exists($user, 'save')) {
+                    /** @var \Illuminate\Database\Eloquent\Model $user */
+                    $user->save();
                 }
             }
 
@@ -276,17 +291,16 @@ class UserService
     {
         try {
             if ($user instanceof Model) {
-                $user->update([$this->ssoIdField => $ssoId]);
-            } else {
-                // For non-Eloquent models, set the field directly
-                if (property_exists($user, $this->ssoIdField)) {
-                    $user->{$this->ssoIdField} = $ssoId;
+                $user->forceFill([$this->ssoIdField => $ssoId])->save();
+                return;
+            }
 
-                    // Try to save if method exists
-                    if (method_exists($user, 'save')) {
-                        /** @var \Illuminate\Database\Eloquent\Model $user */
-                        $user->save();
-                    }
+            if (property_exists($user, $this->ssoIdField)) {
+                $user->{$this->ssoIdField} = $ssoId;
+
+                if (method_exists($user, 'save')) {
+                    /** @var \Illuminate\Database\Eloquent\Model $user */
+                    $user->save();
                 }
             }
         } catch (\Exception $e) {
@@ -310,17 +324,23 @@ class UserService
         $userData = [];
         $identifierCandidates = $this->resolveIdentifierCandidates($ssoUserData);
 
-        // Map standard OIDC claims to user fields
+        // Map standard OIDC claims to user fields with sensible fallbacks
         $givenName = $ssoUserData['given_name'] ?? null;
         $familyName = $ssoUserData['family_name'] ?? null;
         $composedName = trim(implode(' ', array_filter([$givenName, $familyName])));
+        $emailValue = $ssoUserData['email'] ?? null;
+        $nameValue = $ssoUserData['name']
+            ?? ($composedName !== '' ? $composedName : null)
+            ?? ($emailValue ?? null);
+        $identifierValue = $ssoUserData['identifier']
+            ?? $emailValue
+            ?? ($ssoUserData['sub'] ?? null);
 
         $fieldMapping = [
-            'name' => $ssoUserData['name'] ?? ($composedName !== '' ? $composedName : null),
-            'email' => $ssoUserData['email'] ?? null,
-            'nm_user' => $ssoUserData['name'] ?? ($composedName !== '' ? $composedName : null),
-            'username_user' => $ssoUserData['email'] ?? null,
-            'identitas_user' => $ssoUserData['identifier'] ?? null,
+            'name' => $nameValue,
+            'nm_user' => $nameValue,
+            'username_user' => $emailValue,
+            'identitas_user' => $identifierValue,
             'first_name' => $givenName,
             'last_name' => $familyName,
             'username' => $ssoUserData['preferred_username'] ?? null,
@@ -329,9 +349,13 @@ class UserService
             'timezone' => $ssoUserData['zoneinfo'] ?? null,
         ];
 
+        if ($this->identifierField === 'email') {
+            $fieldMapping['email'] = $emailValue;
+        }
+
         // Only include fields that have values and are in updateable fields
         foreach ($fieldMapping as $field => $value) {
-            if ($value !== null && (in_array($field, $this->updateableFields) || $field === 'email')) {
+            if ($value !== null && (in_array($field, $this->updateableFields) || $field === $this->identifierField)) {
                 $userData[$field] = $value;
             }
         }
@@ -410,8 +434,11 @@ class UserService
         }
 
         if (is_string($emailValue) && $emailValue !== '') {
-            $candidates['email'] = $emailValue;
             $candidates[$this->identifierField] = $emailValue;
+
+            if ($this->identifierField === 'email') {
+                $candidates['email'] = $emailValue;
+            }
         }
 
         $fields = array_unique(array_merge([$this->identifierField], $this->fallbackIdentifierFields));

@@ -451,6 +451,13 @@ class UserService
             }
         }
 
+        $emailValue = $ssoUserData['email'] ?? null;
+        if (is_string($emailValue) && $emailValue !== '') {
+            foreach ($this->getEmailColumns() as $column) {
+                $candidates[$column] = $emailValue;
+            }
+        }
+
         return $candidates;
     }
 

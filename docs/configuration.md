@@ -90,6 +90,10 @@ Endpoints are discovered automatically via the `.well-known/openid-configuration
 | `updateable_fields` | Attributes that may be synced from SSO claims. | `['name','email','email_verified_at']` |
 | `auto_create` | Create users automatically when not found. | `true` |
 | `auto_update` | Update mapped attributes on login. | `true` |
+| `identifier_sync_columns` | Columns that should mirror the resolved SSO identifier (`sub`/identifier). Accepts comma-separated env value. | `['identitas_user']` |
+| `email_columns` | Column list treated as the canonical email when reconciling users. Useful for schemas that use `email_user`, etc. | `['email','email_user']` |
+
+> Configure the last two options via `SSO_USER_IDENTIFIER_COLUMNS` and `SSO_USER_EMAIL_COLUMNS` if your client database uses different naming.
 
 ## Logging
 

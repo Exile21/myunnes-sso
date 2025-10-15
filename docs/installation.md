@@ -32,6 +32,9 @@ SSO_BASE_URL=https://sso.myunnes.com
 SSO_CLIENT_ID=your_client_id
 SSO_CLIENT_SECRET=your_client_secret
 SSO_REDIRECT_URI=${APP_URL}/auth/sso/callback
+# Optional schema overrides for client databases
+# SSO_USER_IDENTIFIER_COLUMNS=identitas_user,another_column
+# SSO_USER_EMAIL_COLUMNS=email,email_user
 ```
 
 See the [configuration reference](configuration.md) for all available options.
@@ -42,7 +45,7 @@ See the [configuration reference](configuration.md) for all available options.
 php artisan migrate
 ```
 
-This adds the `sso_id` column to the `users` table so accounts can be linked to SSO identities.
+The migrations add the `sso_id` column to your primary `users` table and ensure legacy client tables (such as `sys_user`) include `remember_token` so Laravel’s session helpers continue working. Re-run `vendor:publish --tag=sso-client-migrations` followed by `php artisan migrate` whenever you upgrade the package and new migrations are introduced.
 
 ## 5. Use the built-in controller & routes
 

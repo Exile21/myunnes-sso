@@ -41,6 +41,12 @@ Having issues integrating the MyUnnes SSO Client package? Start with the scenari
 - Make sure the `users` table contains the `sso_id` column (run the published migration).
 - Check application logs for validation failures while mapping SSO claims to your user model.
 
+## Duplicate rows appear in client user tables
+
+- Verify that `SSO_USER_EMAIL_COLUMNS` lists every column name your client schema uses for email addresses (for example `email,email_user`). The package matches existing users across all configured email columns before creating a record.
+- Ensure `SSO_USER_IDENTIFIER_COLUMNS` includes the columns that should mirror the SSO identifier (e.g. `identitas_user`). Missing columns will remain `NULL` until added.
+- After updating the environment values, clear config cache (`php artisan config:clear`) and retry the login flow. You may safely delete previously duplicated rows once matching is configured correctly.
+
 ## Revocation endpoint failures
 
 - The SSO server must expose `/oauth/revoke`. If it is disabled, revocation attempts will log a warning but logout will still clear local tokens.

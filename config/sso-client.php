@@ -179,7 +179,13 @@ return [
         'sso_id_field' => env('SSO_USER_SSO_ID_FIELD', 'sso_id'),
 
         // Fields to update from SSO
-        'updateable_fields' => array_filter(array_map('trim', explode(',', env('SSO_USER_UPDATEABLE_FIELDS', 'name,email,email_verified_at,identitas_user')))),
+        'updateable_fields' => array_filter(array_map('trim', explode(',', env('SSO_USER_UPDATEABLE_FIELDS', 'name,email,email_verified_at')))),
+
+        // Optional field mappings for aligning SSO claims with custom columns.
+        // Example: ['username_user' => [':identifier', ':email'], 'nm_user' => [':full_name']]
+        'field_mappings' => [
+            // Publish this config file to customize mappings per client schema.
+        ],
 
         // Auto-create users if they don't exist
         'auto_create' => env('SSO_AUTO_CREATE_USERS', true),

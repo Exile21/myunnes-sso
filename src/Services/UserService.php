@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace MyUnnes\SSOClient\Services;
 
-use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Contracts\Auth\Authenticatable;
-use RuntimeException;
 use InvalidArgumentException;
+use RuntimeException;
 
 /**
  * User Service for SSO Client
@@ -24,6 +24,7 @@ class UserService
     protected bool $autoCreate;
     protected bool $autoUpdate;
     protected array $fallbackIdentifierFields = ['email', 'preferred_username', 'identifier'];
+    protected array $fieldMappings;
 
     public function __construct()
     {
@@ -35,13 +36,6 @@ class UserService
         )));
         $this->autoCreate = config('sso-client.user.auto_create', true);
         $this->autoUpdate = config('sso-client.user.auto_update', true);
-
-        if ($this->identifierField !== 'email') {
-            $this->fallbackIdentifierFields = array_values(array_filter(
-                $this->fallbackIdentifierFields,
-                fn ($field) => $field !== 'email'
-            ));
-        }
 
         // Validate user model
         if (!class_exists($this->userModel)) {
@@ -56,6 +50,16 @@ class UserService
             $this->updateableFields[] = $this->identifierField;
         }
 
+        $this->fieldMappings = $this->prepareFieldMappings(
+            config('sso-client.user.field_mappings', [])
+        );
+
+        if ($this->identifierField !== 'email') {
+            $this->fallbackIdentifierFields = array_values(array_filter(
+                $this->fallbackIdentifierFields,
+                fn ($field) => $field !== 'email'
+            ));
+        }
     }
 
     /**
@@ -146,6 +150,7 @@ class UserService
     public function findUserBySSOId(string $ssoId): ?Authenticatable
     {
         try {
+            /** @var \Illuminate\Contracts\Auth\Authenticatable|null */
             return $this->userModel::where($this->ssoIdField, $ssoId)->first();
         } catch (\Exception $e) {
             Log::error('Error finding user by SSO ID', [
@@ -157,9 +162,9 @@ class UserService
     }
 
     /**
-     * Find user by identifier (email, username, etc.).
+     * Find user by multiple identifier fields.
      *
-     * @param string $identifier User identifier
+     * @param array<string, string> $identifiers Field => value pairs to search
      * @return Authenticatable|null
      */
     public function findUserByIdentifiers(array $identifiers): ?Authenticatable
@@ -170,6 +175,7 @@ class UserService
             }
 
             try {
+                /** @var \Illuminate\Contracts\Auth\Authenticatable|null $user */
                 $user = $this->userModel::where($field, $value)->first();
                 if ($user) {
                     return $user;
@@ -213,16 +219,16 @@ class UserService
                 $userData['email_verified_at'] = now();
             }
 
-            /** @var \Illuminate\Database\Eloquent\Model&\Illuminate\Contracts\Auth\Authenticatable $model */
-            $model = new $this->userModel();
-            foreach ($userData as $field => $value) {
-                $model->setAttribute($field, $value);
+            /** @var \Illuminate\Database\Eloquent\Model&\Illuminate\Contracts\Auth\Authenticatable $user */
+            $user = new $this->userModel();
+
+            if (!$user instanceof Model) {
+                throw new RuntimeException('Configured user model must extend Eloquent Model.');
             }
 
-            $model->save();
+            $user->forceFill($userData)->save();
 
-            /** @var \Illuminate\Contracts\Auth\Authenticatable */
-            return $model;
+            return $user;
 
         } catch (\Exception $e) {
             Log::error('Error creating user', [
@@ -322,53 +328,27 @@ class UserService
      */
     protected function mapSSODataToUserData(array $ssoUserData): array
     {
+        // Pre-compute derived values once
+        $derived = $this->computeDerivedValues($ssoUserData);
+
         $userData = [];
-        $identifierCandidates = $this->resolveIdentifierCandidates($ssoUserData);
-        $primaryIdentifier = $this->resolvePrimaryIdentifier($identifierCandidates);
 
-        // Map standard OIDC claims to user fields with sensible fallbacks
-        $givenName = $ssoUserData['given_name'] ?? null;
-        $familyName = $ssoUserData['family_name'] ?? null;
-        $composedName = trim(implode(' ', array_filter([$givenName, $familyName])));
-        $emailValue = $ssoUserData['email'] ?? null;
-        if (!$emailValue && $primaryIdentifier) {
-            $emailValue = $primaryIdentifier;
-        }
+        // Map fields based on configuration
+        foreach ($this->fieldMappings as $field => $sources) {
+            // Skip fields not in updateable list
+            if (!in_array($field, $this->updateableFields, true) && $field !== $this->identifierField) {
+                continue;
+            }
 
-        $nameValue = $ssoUserData['name']
-            ?? ($composedName !== '' ? $composedName : null)
-            ?? ($emailValue ?? $primaryIdentifier);
-
-        $identifierValue = $ssoUserData['identifier']
-            ?? $emailValue
-            ?? $primaryIdentifier
-            ?? ($ssoUserData['sub'] ?? null);
-
-        $fieldMapping = [
-            'name' => $nameValue,
-            'nm_user' => $nameValue,
-            'username_user' => $emailValue,
-            'identitas_user' => $identifierValue,
-            'first_name' => $givenName,
-            'last_name' => $familyName,
-            'username' => $ssoUserData['preferred_username'] ?? null,
-            'avatar' => $ssoUserData['picture'] ?? null,
-            'locale' => $ssoUserData['locale'] ?? null,
-            'timezone' => $ssoUserData['zoneinfo'] ?? null,
-        ];
-
-        if ($this->identifierField === 'email') {
-            $fieldMapping['email'] = $emailValue;
-        }
-
-        // Only include fields that have values and are in updateable fields
-        foreach ($fieldMapping as $field => $value) {
-            if ($value !== null && (in_array($field, $this->updateableFields) || $field === $this->identifierField)) {
+            $value = $this->resolveFieldValue($sources, $ssoUserData, $derived);
+            if ($value !== null && $value !== '') {
                 $userData[$field] = $value;
             }
         }
 
-        if (is_string($primaryIdentifier) && trim($primaryIdentifier) !== '') {
+        // Ensure primary identifier is set
+        $primaryIdentifier = $derived['identifier'] ?? $derived['email'];
+        if ($primaryIdentifier) {
             $userData[$this->identifierField] = $primaryIdentifier;
         }
 
@@ -429,41 +409,177 @@ class UserService
      * @param array $ssoUserData
      * @return array<string, string>
      */
-    protected function resolveIdentifierCandidates(array $ssoUserData): array
+    /**
+     * Build a list of possible identifiers derived from the SSO payload.
+     *
+     * @param array<string, mixed> $ssoUserData
+     * @param array<string, mixed>|null $derived
+     * @return array<string, string>
+     */
+    protected function resolveIdentifierCandidates(array $ssoUserData, ?array $derived = null): array
     {
+        $derived ??= $this->computeDerivedValues($ssoUserData);
+
         $candidates = [];
 
-        $emailValue = $ssoUserData['email'] ?? null;
-        if (is_string($emailValue)) {
-            $emailValue = trim($emailValue);
+        $primary = $derived['identifier'] ?? null;
+        if (is_string($primary) && $primary !== '') {
+            $candidates[$this->identifierField] = $primary;
+        } elseif (!empty($derived['email'])) {
+            $candidates[$this->identifierField] = $derived['email'];
         }
 
-        if (is_string($emailValue) && $emailValue !== '') {
-            $candidates[$this->identifierField] = $emailValue;
-
-            if ($this->identifierField === 'email') {
-                $candidates['email'] = $emailValue;
-            }
-        }
-
-        $fields = array_unique(array_merge([$this->identifierField], $this->fallbackIdentifierFields));
-
-        foreach ($fields as $field) {
+        foreach ($this->fallbackIdentifierFields as $field) {
             if (!isset($ssoUserData[$field])) {
                 continue;
             }
 
-            $value = $ssoUserData[$field];
-            if (is_string($value)) {
-                $value = trim($value);
-            }
-
-            if (is_string($value) && $value !== '') {
+            $value = is_string($ssoUserData[$field]) ? trim($ssoUserData[$field]) : null;
+            if ($value !== null && $value !== '') {
                 $candidates[$field] = $value;
             }
         }
 
+        foreach ($this->fieldMappings as $column => $sources) {
+            $value = $this->resolveFieldValue($sources, $ssoUserData, $derived);
+            if ($value !== null && $value !== '') {
+                $candidates[$column] = $value;
+            }
+        }
+
         return array_filter($candidates, fn ($value) => is_string($value) && $value !== '');
+    }
+
+    /**
+     * Prepare field mappings from configuration, falling back to sensible defaults.
+     */
+    /**
+     * Normalise field mapping configuration.
+     *
+     * @param array<string, mixed>|string|null $configMappings
+     * @return array<string, array<int, string>>
+     */
+    protected function prepareFieldMappings($configMappings): array
+    {
+        $defaultMappings = [
+            $this->identifierField => [':identifier', ':email'],
+            'name' => [':full_name'],
+            'username_user' => [':identifier', ':email'],
+            'nm_user' => [':full_name'],
+            'identitas_user' => [':identifier'],
+        ];
+
+        if (!is_array($configMappings) || empty($configMappings)) {
+            $configMappings = $defaultMappings;
+        }
+
+        $normalized = [];
+
+        foreach ($configMappings as $column => $sources) {
+            if (!is_string($column) || trim($column) === '') {
+                continue;
+            }
+
+            $sources = is_array($sources) ? $sources : [$sources];
+            $sources = array_values(array_filter(array_map(
+                function ($source) {
+                    return is_string($source) ? trim($source) : null;
+                },
+                $sources
+            )));
+
+            if (empty($sources)) {
+                continue;
+            }
+
+            if (!in_array($column, $this->updateableFields, true) && $column !== $this->identifierField) {
+                continue;
+            }
+
+            $normalized[$column] = $sources;
+        }
+
+        if (!isset($normalized[$this->identifierField])) {
+            $normalized[$this->identifierField] = [':identifier', ':email'];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Pre-compute reusable claim values to simplify mapping logic.
+     *
+     * @param array<string, mixed> $ssoUserData
+     * @return array<string, string|null>
+     */
+    protected function computeDerivedValues(array $ssoUserData): array
+    {
+        $sub = $ssoUserData['sub'] ?? null;
+        $email = !empty($ssoUserData['email']) ? trim((string) $ssoUserData['email']) : null;
+        $given = !empty($ssoUserData['given_name']) ? trim((string) $ssoUserData['given_name']) : null;
+        $family = !empty($ssoUserData['family_name']) ? trim((string) $ssoUserData['family_name']) : null;
+        $name = !empty($ssoUserData['name']) ? trim((string) $ssoUserData['name']) : null;
+        $preferred = !empty($ssoUserData['preferred_username']) ? trim((string) $ssoUserData['preferred_username']) : null;
+
+        // Compose full name from parts if not provided
+        if (!$name && ($given || $family)) {
+            $name = trim(($given ?? '') . ' ' . ($family ?? '')) ?: null;
+        }
+
+        // Determine identifier with fallback chain
+        $identifier = !empty($ssoUserData['identifier']) ? trim((string) $ssoUserData['identifier']) : null;
+        if (!$identifier) {
+            $identifier = $email ?? $preferred ?? $sub;
+        }
+
+        // Full name fallback chain
+        $fullName = $name ?? $preferred ?? $email ?? $identifier;
+
+        return [
+            'sub' => $sub,
+            'email' => $email,
+            'identifier' => $identifier,
+            'full_name' => $fullName,
+            'given_name' => $given,
+            'family_name' => $family,
+            'preferred_username' => $preferred,
+        ];
+    }
+
+    /**
+     * Resolve the first non-empty value for the configured sources.
+     *
+     * @param array<int, string> $sources
+     * @param array<string, mixed> $ssoUserData
+     * @param array<string, mixed> $derived
+     * @return string|null
+     */
+    protected function resolveFieldValue(array $sources, array $ssoUserData, array $derived): ?string
+    {
+        foreach ($sources as $source) {
+            if (!is_string($source) || $source === '') {
+                continue;
+            }
+
+            $value = null;
+
+            if ($source[0] === ':') {
+                $key = substr($source, 1);
+                $value = $derived[$key] ?? null;
+            } else {
+                $value = $ssoUserData[$source] ?? null;
+            }
+
+            if (is_string($value)) {
+                $value = trim($value);
+            }
+
+            if ($value !== null && $value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     /**

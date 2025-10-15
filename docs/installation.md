@@ -34,10 +34,12 @@ SSO_CLIENT_SECRET=your_client_secret
 SSO_REDIRECT_URI=${APP_URL}/auth/sso/callback
 # Optional overrides for custom schemas
 # SSO_USER_IDENTIFIER=email_user
-# SSO_USER_UPDATEABLE_FIELDS="name,email_user,identitas_user"
+# SSO_USER_UPDATEABLE_FIELDS="username_user,nm_user,identitas_user"
 ```
 
 See the [configuration reference](configuration.md) for all available options.
+
+> Tip: publish `config/sso-client.php` to customize `field_mappings` so SSO claims land in the right columns for each client schema.
 
 ## 4. Run database migration
 

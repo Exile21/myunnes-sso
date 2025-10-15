@@ -87,9 +87,29 @@ Endpoints are discovered automatically via the `.well-known/openid-configuration
 | `model` | User model class to sync with. | `App\Models\User` |
 | `identifier_field` | Lookup field for local users (configurable via `SSO_USER_IDENTIFIER`, e.g. `email_user`). | `email` |
 | `sso_id_field` | Column used to store the SSO subject (`sub`). | `sso_id` |
-| `updateable_fields` | Attributes that may be synced from SSO claims (comma separated via `SSO_USER_UPDATEABLE_FIELDS`). | `['name','email','email_verified_at','identitas_user']` |
+| `updateable_fields` | Attributes that may be synced from SSO claims (comma separated via `SSO_USER_UPDATEABLE_FIELDS`). | `['name','email','email_verified_at']` |
 | `auto_create` | Create users automatically when not found. | `true` |
 | `auto_update` | Update mapped attributes on login. | `true` |
+| `field_mappings` | Map SSO claims (or helper tokens) to local columns; publish config to customize. | `[]` |
+
+### Field Mapping Helpers
+
+Each mapping entry associates a database column with an ordered list of claim keys or helper tokens. The first non-empty value wins. Built-in helper tokens:
+
+- `:identifier` – `identifier` claim, then email, then subject (`sub`).
+- `:email` – normalized email address.
+- `:full_name` – display name, then `given_name + family_name`, then email/identifier.
+- `:given_name`, `:family_name`, `:preferred_username`, `:sub` – direct claim lookups.
+
+Example (`config/sso-client.php` after publishing):
+
+```php
+'field_mappings' => [
+    'username_user' => [':identifier', ':email'],
+    'nm_user'       => [':full_name'],
+    'identitas_user'=> [':identifier'],
+],
+```
 
 ## Logging
 

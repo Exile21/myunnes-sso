@@ -44,8 +44,9 @@ Having issues integrating the MyUnnes SSO Client package? Start with the scenari
 ## Duplicate rows appear in client user tables
 
 - Ensure `SSO_USER_IDENTIFIER` references the column that stores email in your client schema (for example set it to `email_user`). The package searches this column before creating a new record.
-- Include every column you expect to sync in `SSO_USER_UPDATEABLE_FIELDS` (e.g. `name,email_user,identitas_user`) so existing rows are updated instead of duplicated.
-- After adjusting the environment values, clear the config cache (`php artisan config:clear`) and retry the login flow. You can remove any previously duplicated rows once matching is configured correctly.
+- Include every column you expect to sync in `SSO_USER_UPDATEABLE_FIELDS` (e.g. `username_user,nm_user,identitas_user`).
+- Publish `config/sso-client.php` and add `field_mappings` entries so SSO claims populate the appropriate columns (for example `'username_user' => [':identifier', ':email']`).
+- After adjusting configuration, clear the cache (`php artisan config:clear`) and retry the login flow. You can remove any previously duplicated rows once matching is configured correctly.
 
 ## Revocation endpoint failures
 

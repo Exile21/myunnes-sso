@@ -35,6 +35,11 @@ SSO_REDIRECT_URI=${APP_URL}/auth/sso/callback
 # Optional overrides for custom schemas
 # SSO_USER_IDENTIFIER=email_user
 # SSO_USER_UPDATEABLE_FIELDS="username_user,nm_user,identitas_user"
+# SSO_SCOPES=
+# SSO_DYNAMIC_SCOPES=true
+# SSO_PREFERRED_SCOPES="profile,email,roles"
+# SSO_REQUIRED_SCOPES="openid,unnes"
+# SSO_FALLBACK_SCOPES="profile,email"
 ```
 
 See the [configuration reference](configuration.md) for all available options.

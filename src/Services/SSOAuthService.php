@@ -27,6 +27,11 @@ class SSOAuthService
     protected string $clientSecret;
     protected string $redirectUri;
     protected array $scopes;
+    protected array $configuredScopes;
+    protected array $preferredScopes;
+    protected array $requiredScopes;
+    protected array $fallbackScopes;
+    protected bool $dynamicScopes;
     protected bool $forcePKCE;
     protected string $codeChallengeMethod;
     protected int $httpTimeout;
@@ -51,7 +56,11 @@ class SSOAuthService
         $this->clientId = config('sso-client.client_id');
         $this->clientSecret = config('sso-client.client_secret');
         $this->redirectUri = config('sso-client.redirect_uri');
-        $this->scopes = config('sso-client.scopes', ['openid', 'profile', 'email']);
+        $this->configuredScopes = config('sso-client.scopes', ['openid', 'profile', 'email', 'unnes']);
+        $this->preferredScopes = config('sso-client.preferred_scopes', ['profile', 'email', 'roles']);
+        $this->requiredScopes = config('sso-client.required_scopes', ['openid', 'unnes']);
+        $this->fallbackScopes = config('sso-client.fallback_scopes', ['profile', 'email']);
+        $this->dynamicScopes = (bool) config('sso-client.dynamic_scopes', true);
         $this->forcePKCE = config('sso-client.security.force_pkce', true);
         $this->codeChallengeMethod = config('sso-client.security.code_challenge_method', 'S256');
         $this->httpTimeout = config('sso-client.http.timeout', 30);
@@ -62,6 +71,8 @@ class SSOAuthService
 
         // Validate configuration
         $this->validateConfiguration();
+
+        $this->scopes = $this->resolveScopes();
     }
 
     /**
@@ -328,6 +339,24 @@ class SSOAuthService
     }
 
     /**
+     * Return the currently resolved scope list.
+     */
+    public function getResolvedScopes(): array
+    {
+        return $this->scopes;
+    }
+
+    /**
+     * Force a scope refresh (e.g., after server configuration changes).
+     */
+    public function refreshResolvedScopes(bool $forceRefresh = false): array
+    {
+        $this->scopes = $this->resolveScopes($forceRefresh);
+
+        return $this->scopes;
+    }
+
+    /**
      * Clear all stored authentication data.
      *
      * @return void
@@ -350,6 +379,69 @@ class SSOAuthService
         $this->stateService->clearAllStates();
 
         Log::info('SSO logout completed');
+    }
+
+    /**
+     * Resolve the scope list using configuration and discovery data.
+     */
+    protected function resolveScopes(bool $forceRefresh = false): array
+    {
+        $required = $this->normalizeScopeArray($this->requiredScopes, ['openid']);
+        $scopes = $this->normalizeScopeArray($this->configuredScopes);
+
+        if (empty($scopes) && $this->dynamicScopes) {
+            try {
+                $supported = $this->discoveryService->getSupportedScopes($forceRefresh);
+            } catch (\Throwable $e) {
+                Log::warning('Unable to retrieve supported scopes from discovery document', [
+                    'error' => $e->getMessage(),
+                ]);
+                $supported = [];
+            }
+
+            if (!empty($supported)) {
+                $preferred = $this->normalizeScopeArray($this->preferredScopes);
+
+                if (!empty($preferred)) {
+                    $scopes = array_values(array_intersect($preferred, $supported));
+                }
+
+                if (empty($scopes)) {
+                    $fallback = $this->normalizeScopeArray($this->fallbackScopes, ['profile', 'email']);
+                    $scopes = array_values(array_intersect($fallback, $supported));
+                }
+
+                if (empty($scopes)) {
+                    $scopes = $supported;
+                }
+            }
+        }
+
+        if (empty($scopes)) {
+            $scopes = $this->normalizeScopeArray($this->fallbackScopes, ['profile', 'email']);
+        }
+
+        $scopes = array_values(array_unique(array_merge($scopes, $required)));
+
+        if (!in_array('openid', $scopes, true)) {
+            array_unshift($scopes, 'openid');
+        }
+
+        return $scopes;
+    }
+
+    /**
+     * Normalize a scope array by trimming, filtering and deduplicating values.
+     */
+    protected function normalizeScopeArray(array $scopes, array $defaults = []): array
+    {
+        $list = !empty($scopes) ? $scopes : $defaults;
+
+        $list = array_values(array_filter(array_map(static function ($scope) {
+            return is_string($scope) ? trim($scope) : '';
+        }, $list)));
+
+        return array_values(array_unique($list));
     }
 
     /**

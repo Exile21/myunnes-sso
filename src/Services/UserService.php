@@ -36,7 +36,7 @@ class UserService
         $this->identifierField = config('sso-client.user.identifier_field', 'email');
         $this->ssoIdField = config('sso-client.user.sso_id_field', 'sso_id');
         $this->updateableFields = array_values(array_filter(array_unique(
-            config('sso-client.user.updateable_fields', ['name', 'email', 'identitas_user'])
+            config('sso-client.user.updateable_fields', ['name', 'email', 'nm_user', 'username_user', 'identitas_user'])
         )));
         $this->autoCreate = config('sso-client.user.auto_create', true);
         $this->autoUpdate = config('sso-client.user.auto_update', true);
@@ -85,7 +85,8 @@ class UserService
             }
 
             $ssoId = $ssoUserData['sub'];
-            $identifierCandidates = $this->resolveIdentifierCandidates($ssoUserData);
+            $derivedValues = $this->computeDerivedValues($ssoUserData);
+            $identifierCandidates = $this->resolveIdentifierCandidates($ssoUserData, $derivedValues);
 
             $identifier = $this->resolvePrimaryIdentifier($identifierCandidates);
 
@@ -94,7 +95,7 @@ class UserService
             }
 
             // Use database transaction to prevent race conditions
-            return DB::transaction(function () use ($ssoUserData, $ssoId, $identifierCandidates, $identifier) {
+            return DB::transaction(function () use ($ssoUserData, $ssoId, $identifierCandidates, $identifier, $derivedValues) {
                 // Try to find user by SSO ID first (with lock to prevent duplicates)
                 $user = $this->userModel::where($this->ssoIdField, $ssoId)
                     ->lockForUpdate()
@@ -103,7 +104,7 @@ class UserService
                 if ($user) {
                     // Update existing user if auto-update is enabled
                     if ($this->autoUpdate) {
-                        $this->updateUser($user, $ssoUserData);
+                        $this->updateUser($user, $ssoUserData, $derivedValues);
                     }
 
                     return $user;
@@ -117,7 +118,7 @@ class UserService
                     $this->linkUserToSSO($user, $ssoId);
 
                     if ($this->autoUpdate) {
-                        $this->updateUser($user, $ssoUserData);
+                        $this->updateUser($user, $ssoUserData, $derivedValues);
                     }
 
                     return $user;
@@ -125,7 +126,7 @@ class UserService
 
                 // Create new user if auto-create is enabled
                 if ($this->autoCreate) {
-                    $user = $this->createUser($ssoUserData);
+                    $user = $this->createUser($ssoUserData, $derivedValues);
 
                     Log::info('New SSO user created', [
                         'sso_id' => $ssoId,
@@ -261,10 +262,11 @@ class UserService
      * @return Authenticatable
      * @throws RuntimeException
      */
-    protected function createUser(array $ssoUserData): Authenticatable
+    protected function createUser(array $ssoUserData, ?array $derivedValues = null): Authenticatable
     {
         try {
-            $userData = $this->mapSSODataToUserData($ssoUserData);
+            $derivedValues ??= $this->computeDerivedValues($ssoUserData);
+            $userData = $this->mapSSODataToUserData($ssoUserData, $derivedValues);
 
             // Add SSO ID
             $userData[$this->ssoIdField] = $ssoUserData['sub'];
@@ -309,10 +311,11 @@ class UserService
      * @param array $ssoUserData SSO user data
      * @return void
      */
-    protected function updateUser(Authenticatable $user, array $ssoUserData): void
+    protected function updateUser(Authenticatable $user, array $ssoUserData, ?array $derivedValues = null): void
     {
         try {
-            $userData = $this->mapSSODataToUserData($ssoUserData);
+            $derivedValues ??= $this->computeDerivedValues($ssoUserData);
+            $userData = $this->mapSSODataToUserData($ssoUserData, $derivedValues);
 
             // Only update specified fields
             $updateData = [];
@@ -388,10 +391,10 @@ class UserService
      * @param array $ssoUserData SSO user data
      * @return array Mapped user data
      */
-    protected function mapSSODataToUserData(array $ssoUserData): array
+    protected function mapSSODataToUserData(array $ssoUserData, ?array $precomputed = null): array
     {
         // Pre-compute derived values once
-        $derived = $this->computeDerivedValues($ssoUserData);
+        $derived = $precomputed ?? $this->computeDerivedValues($ssoUserData);
 
         $userData = [];
 
@@ -430,7 +433,9 @@ class UserService
             return false;
         }
 
-        return !empty($this->resolveIdentifierCandidates($ssoUserData));
+        $derived = $this->computeDerivedValues($ssoUserData);
+
+        return !empty($this->resolveIdentifierCandidates($ssoUserData, $derived));
     }
 
     /**
@@ -465,12 +470,6 @@ class UserService
         return $sanitized;
     }
 
-    /**
-     * Resolve potential identifier values from SSO payload.
-     *
-     * @param array $ssoUserData
-     * @return array<string, string>
-     */
     /**
      * Build a list of possible identifiers derived from the SSO payload.
      * Only uses columns from field_mappings to avoid querying non-existent columns.
@@ -524,6 +523,9 @@ class UserService
         $defaultMappings = [
             $this->identifierField => [':identifier', ':email'],
             'name' => [':full_name'],
+            'nm_user' => [':full_name'],
+            'username_user' => [':identifier', ':email'],
+            'identitas_user' => [':identifier'],
             'email' => [':email'],
         ];
 

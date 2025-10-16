@@ -44,18 +44,25 @@ return [
     |--------------------------------------------------------------------------
     |
     | The scopes to request during OAuth authentication.
-    | Available scopes: openid, profile, email, roles, unnes, read, write, admin
+    | Common scopes: openid, profile, email, roles, unnes
     |
     | Note: 'unnes' scope is required to receive 'identifier' and 'unnes_data' fields
     |
     */
 
-    'scopes' => [
-        'openid',
-        'profile',
-        'email',
-        'unnes',  // Required for :identifier mapping
-    ],
+    'scopes' => array_values(array_filter(array_map('trim', explode(',', (string) env('SSO_SCOPES', 'openid,profile,email,unnes'))))),
+
+    // When enabled, the client will attempt to fetch supported scopes from the discovery document.
+    'dynamic_scopes' => env('SSO_DYNAMIC_SCOPES', true),
+
+    // Preferred scopes to request when dynamic scopes are enabled.
+    'preferred_scopes' => array_values(array_filter(array_map('trim', explode(',', (string) env('SSO_PREFERRED_SCOPES', 'profile,email,roles'))))),
+
+    // Scopes that must always be included in every authorization request.
+    'required_scopes' => array_values(array_filter(array_map('trim', explode(',', (string) env('SSO_REQUIRED_SCOPES', 'openid,unnes'))))) ?: ['openid', 'unnes'],
+
+    // Fallback scopes if discovery does not provide usable scope information.
+    'fallback_scopes' => array_values(array_filter(array_map('trim', explode(',', (string) env('SSO_FALLBACK_SCOPES', 'profile,email'))))),
 
     /*
     |--------------------------------------------------------------------------

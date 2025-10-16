@@ -16,7 +16,11 @@ Below is an overview of the available options.
 | `client_id` | OAuth client identifier issued by the SSO server. | `null` |
 | `client_secret` | OAuth client secret (nullable for public clients). | `null` |
 | `redirect_uri` | Full callback URL in your application. | `null` |
-| `scopes` | Scopes requested during authorization. | `['openid','profile','email']` |
+| `scopes` | Static scopes requested during authorization (leave blank to use discovery). | `['openid','profile','email','unnes']` |
+| `dynamic_scopes` | When true, fetch supported scopes from discovery and merge with preferences. | `true` |
+| `preferred_scopes` | Preferred scopes to request when dynamic lookups succeed. | `['profile','email','roles']` |
+| `required_scopes` | Scopes that are always appended to every request. | `['openid','unnes']` |
+| `fallback_scopes` | Scopes to request if discovery does not return usable scope data. | `['profile','email']` |
 
 ## Endpoints
 
@@ -87,10 +91,32 @@ Endpoints are discovered automatically via the `.well-known/openid-configuration
 | `model` | User model class to sync with. | `App\Models\User` |
 | `identifier_field` | Lookup field for local users (configurable via `SSO_USER_IDENTIFIER`, e.g. `email_user`). | `email` |
 | `sso_id_field` | Column used to store the SSO subject (`sub`). | `sso_id` |
-| `updateable_fields` | Attributes that may be synced from SSO claims (comma separated via `SSO_USER_UPDATEABLE_FIELDS`). | `['name','email','email_verified_at']` |
+| `updateable_fields` | Attributes that may be synced from SSO claims (comma separated via `SSO_USER_UPDATEABLE_FIELDS`). | `['name','email','username_user','nm_user','identitas_user']` |
 | `auto_create` | Create users automatically when not found. | `true` |
 | `auto_update` | Update mapped attributes on login. | `true` |
 | `field_mappings` | Map SSO claims (or helper tokens) to local columns; publish config to customize. | `[]` |
+| `set_active_on_create` | Automatically mark new users active when created. | `true` |
+| `active_field` | Column used when `set_active_on_create` is enabled. | `is_aktif` |
+| `active_value` | Value written to the active column. | `1` |
+
+### Required & Available Scopes
+
+The server enforces the scopes defined in `config/oauth.php`:
+
+- `available_scopes` lists every scope the server understands (now including `unnes`).
+- `required_scopes` ensures specific scopes are always granted when permitted for a client (defaults to `['openid','unnes']`).
+
+Adjust these settings on the server if you add or deprecate scopes.
+
+> Tip: Administrators can manage allowed scopes per client from the SSO dashboard (`OAuth Clients → Edit`). The UI is backed by this configuration, so any changes to `available_scopes` or `field_mappings` become immediately selectable from the form.
+
+When the client package has `dynamic_scopes` enabled and `SSO_SCOPES` is left blank, it will:
+
+1. Read the `scopes_supported` array from the discovery document.
+2. Prefer values listed in `preferred_scopes` (falling back to `fallback_scopes` if needed).
+3. Always append `required_scopes` to the final list.
+
+Set `SSO_SCOPES` to a comma-separated list if you need a static scope set regardless of discovery data.
 
 ### Field Mapping Helpers
 

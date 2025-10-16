@@ -46,6 +46,8 @@ Having issues integrating the MyUnnes SSO Client package? Start with the scenari
 - Ensure `SSO_USER_IDENTIFIER` references the column that stores email in your client schema (for example set it to `email_user`). The package searches this column before creating a new record.
 - Include every column you expect to sync in `SSO_USER_UPDATEABLE_FIELDS` (e.g. `username_user,nm_user,identitas_user`).
 - Publish `config/sso-client.php` and add `field_mappings` entries so SSO claims populate the appropriate columns (for example `'username_user' => [':identifier', ':email']`).
+- Use the SSO admin UI (OAuth Clients → Edit) to adjust the allowed scopes for a client after updating configuration.
+- If the client package is still requesting old scopes, clear cached configuration and set `SSO_SCOPES=` to allow dynamic discovery, or explicitly list the scopes you expect in `SSO_SCOPES`.
 - After adjusting configuration, clear the cache (`php artisan config:clear`) and retry the login flow. You can remove any previously duplicated rows once matching is configured correctly.
 
 ## Revocation endpoint failures

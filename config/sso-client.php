@@ -43,8 +43,10 @@ return [
     | OAuth Scopes
     |--------------------------------------------------------------------------
     |
-    | The OAuth scopes to request from the SSO server.
-    | Available scopes: openid, profile, email, roles, read, write, admin
+    | The scopes to request during OAuth authentication.
+    | Available scopes: openid, profile, email, roles, unnes, read, write, admin
+    |
+    | Note: 'unnes' scope is required to receive 'identifier' and 'unnes_data' fields
     |
     */
 
@@ -52,6 +54,7 @@ return [
         'openid',
         'profile',
         'email',
+        'unnes',  // Required for :identifier mapping
     ],
 
     /*

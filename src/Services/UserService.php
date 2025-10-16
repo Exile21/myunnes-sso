@@ -213,10 +213,19 @@ class UserService
      */
     protected function findUserByIdentifiersWithLock(array $identifiers): ?Authenticatable
     {
+        // Deduplicate by field to avoid locking same row twice (causes deadlock)
+        $seen = [];
+
         foreach ($identifiers as $field => $value) {
             if (!is_string($value) || trim($value) === '') {
                 continue;
             }
+
+            // Skip if we've already tried this field
+            if (isset($seen[$field])) {
+                continue;
+            }
+            $seen[$field] = true;
 
             try {
                 /** @var \Illuminate\Contracts\Auth\Authenticatable|null $user */
@@ -464,6 +473,7 @@ class UserService
      */
     /**
      * Build a list of possible identifiers derived from the SSO payload.
+     * Only uses columns from field_mappings to avoid querying non-existent columns.
      *
      * @param array<string, mixed> $ssoUserData
      * @param array<string, mixed>|null $derived
@@ -475,6 +485,7 @@ class UserService
 
         $candidates = [];
 
+        // Add primary identifier field with its mapped value
         $primary = $derived['identifier'] ?? null;
         if (is_string($primary) && $primary !== '') {
             $candidates[$this->identifierField] = $primary;
@@ -482,18 +493,13 @@ class UserService
             $candidates[$this->identifierField] = $derived['email'];
         }
 
-        foreach ($this->fallbackIdentifierFields as $field) {
-            if (!isset($ssoUserData[$field])) {
+        // Only use columns from field_mappings to avoid non-existent columns
+        foreach ($this->fieldMappings as $column => $sources) {
+            // Skip if column is not in updateable fields or identifier field
+            if (!in_array($column, $this->updateableFields, true) && $column !== $this->identifierField) {
                 continue;
             }
 
-            $value = is_string($ssoUserData[$field]) ? trim($ssoUserData[$field]) : null;
-            if ($value !== null && $value !== '') {
-                $candidates[$field] = $value;
-            }
-        }
-
-        foreach ($this->fieldMappings as $column => $sources) {
             $value = $this->resolveFieldValue($sources, $ssoUserData, $derived);
             if ($value !== null && $value !== '') {
                 $candidates[$column] = $value;

@@ -6,6 +6,7 @@ namespace MyUnnes\SSOClient\Services;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Contracts\Auth\Authenticatable;
 use InvalidArgumentException;
 use RuntimeException;
@@ -92,50 +93,55 @@ class UserService
                 throw new InvalidArgumentException('Missing identifier in SSO user data');
             }
 
-            // Try to find user by SSO ID first
-            $user = $this->findUserBySSOId($ssoId);
+            // Use database transaction to prevent race conditions
+            return DB::transaction(function () use ($ssoUserData, $ssoId, $identifierCandidates, $identifier) {
+                // Try to find user by SSO ID first (with lock to prevent duplicates)
+                $user = $this->userModel::where($this->ssoIdField, $ssoId)
+                    ->lockForUpdate()
+                    ->first();
 
-            if ($user) {
-                // Update existing user if auto-update is enabled
-                if ($this->autoUpdate) {
-                    $this->updateUser($user, $ssoUserData);
+                if ($user) {
+                    // Update existing user if auto-update is enabled
+                    if ($this->autoUpdate) {
+                        $this->updateUser($user, $ssoUserData);
+                    }
+
+                    return $user;
                 }
 
-                return $user;
-            }
+                // Try to find user by identifier (email, username, etc.) with lock
+                $user = $this->findUserByIdentifiersWithLock($identifierCandidates);
 
-            // Try to find user by identifier (email, username, etc.)
-            $user = $this->findUserByIdentifiers($identifierCandidates);
+                if ($user) {
+                    // Link existing user to SSO
+                    $this->linkUserToSSO($user, $ssoId);
 
-            if ($user) {
-                // Link existing user to SSO
-                $this->linkUserToSSO($user, $ssoId);
+                    if ($this->autoUpdate) {
+                        $this->updateUser($user, $ssoUserData);
+                    }
 
-                if ($this->autoUpdate) {
-                    $this->updateUser($user, $ssoUserData);
+                    return $user;
                 }
 
-                return $user;
-            }
+                // Create new user if auto-create is enabled
+                if ($this->autoCreate) {
+                    $user = $this->createUser($ssoUserData);
 
-            // Create new user if auto-create is enabled
-            if ($this->autoCreate) {
-                $user = $this->createUser($ssoUserData);
+                    Log::info('New SSO user created', [
+                        'sso_id' => $ssoId,
+                        'identifier' => $identifier,
+                    ]);
 
-                Log::info('New SSO user created', [
+                    return $user;
+                }
+
+                Log::warning('User not found and auto-create disabled', [
                     'sso_id' => $ssoId,
                     'identifier' => $identifier,
                 ]);
 
-                return $user;
-            }
-
-            Log::warning('User not found and auto-create disabled', [
-                'sso_id' => $ssoId,
-                'identifier' => $identifier,
-            ]);
-
-            return null;
+                return null;
+            });
 
         } catch (\Exception $e) {
             Log::error('Error in findOrCreateUser', [
@@ -188,6 +194,40 @@ class UserService
                 }
             } catch (\Exception $e) {
                 Log::error('Error finding user by identifier', [
+                    'identifier' => $value,
+                    'field' => $field,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Find user by multiple identifier fields with database lock.
+     * Used within transactions to prevent race conditions.
+     *
+     * @param array<string, string> $identifiers Field => value pairs to search
+     * @return Authenticatable|null
+     */
+    protected function findUserByIdentifiersWithLock(array $identifiers): ?Authenticatable
+    {
+        foreach ($identifiers as $field => $value) {
+            if (!is_string($value) || trim($value) === '') {
+                continue;
+            }
+
+            try {
+                /** @var \Illuminate\Contracts\Auth\Authenticatable|null $user */
+                $user = $this->userModel::where($field, $value)
+                    ->lockForUpdate()
+                    ->first();
+                if ($user) {
+                    return $user;
+                }
+            } catch (\Exception $e) {
+                Log::error('Error finding user by identifier with lock', [
                     'identifier' => $value,
                     'field' => $field,
                     'error' => $e->getMessage(),

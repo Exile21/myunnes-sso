@@ -69,10 +69,10 @@ class SSOAuthService
         $this->httpRetryDelay = (int) config('sso-client.http.retry_delay', 1000);
         $this->verifySsl = config('sso-client.security.verify_ssl', true);
 
-        // Validate configuration
-        $this->validateConfiguration();
-
         $this->scopes = $this->resolveScopes();
+
+        // Validate configuration after scopes have been resolved
+        $this->validateConfiguration();
     }
 
     /**
